@@ -1,0 +1,7 @@
+{
+  "name": "papertrade",
+  "private": true,
+  "description": "Browser paper-trading simulator (single static file)",
+  "scripts": { "test": "node tests/smoke.js && node tests/live.js" },
+  "devDependencies": { "jsdom": "^24.0.0" }
+}

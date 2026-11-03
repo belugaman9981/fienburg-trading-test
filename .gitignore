@@ -1,18 +1,21 @@
-*/config/development
-*/logs/log-*.php
-!*/logs/index.html
-*/cache/*
-!system/cache/*
-!*/cache/index.html
-!*/cache/.htaccess
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
 
-user_guide_src/build/*
-user_guide_src/cilexer/build/*
-user_guide_src/cilexer/dist/*
-user_guide_src/cilexer/pycilexer.egg-info/*
+# Downloaded price data cache (created by training bot/trader_lab.py)
+data_cache/
 
-#codeigniter 3
-application/logs/*
-!application/logs/index.html
-!application/logs/.htaccess
-/vendor/
+# Node
+node_modules/
+
+# Secrets - never commit API keys
+.env
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

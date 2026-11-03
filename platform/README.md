@@ -1,11 +1,11 @@
 # PaperTrade
 
-A paper trading simulator that runs entirely in the browser. Start with $100,000 in fake cash, place market and limit orders, and track your positions and portfolio P/L. No real money, no backend, no API keys.
+A paper trading simulator that runs entirely in the browser. Start with $100,000 in fake cash, place market, limit and stop orders, and track your positions and portfolio P/L. No real money, no backend, no API keys.
 
 **Live demo:** https://belugaman9981.github.io/papertrade/
 
 ## Features
-- Market and limit orders (limit orders fill when the price crosses your number, and can be cancelled)
+- Market, limit and stop orders (limit orders fill when the price crosses your number; stop orders become market orders once the price trades through the stop; all can be cancelled, and open buys reserve buying power)
 - Candlestick chart with MA(7) and MA(25) overlays, volume bars, high/low markers and a live last-price tag
 - 12 stocks/ETFs plus BTC/USD (fractional quantities) in a live-updating watchlist with sparklines
 - Positions table with average cost, P/L and one-click close
@@ -27,8 +27,16 @@ python3 -m http.server 8000
 ## Notes
 Prices are **simulated** with a random walk, so they are not real market data. This is a practice tool, not financial advice, and it is not affiliated with Alpaca or any broker.
 
+## Tests
+Headless tests drive the real page in jsdom, including the Alpaca live mode against a mocked API and WebSocket (no keys or network needed):
+
+```bash
+npm install
+npm test
+```
+
 ## Ideas for next steps
-- Stop and stop-limit orders
+- Stop-limit and trailing-stop orders
 - Accounts and a shared leaderboard (needs a backend such as Supabase)
 
 ## License
