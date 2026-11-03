@@ -58,14 +58,24 @@ input,select{width:100%;margin-top:4px;padding:9px 10px;border:1px solid var(--b
 .sm:hover{background:var(--hv)}
 .ghost{background:transparent;border:1px solid var(--bd);color:var(--mut);border-radius:8px;padding:6px 10px;cursor:pointer;font:inherit;font-size:12px}
 .foot{color:var(--mut);font-size:12px;text-align:center;margin:6px 0 18px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:640px){.two{grid-template-columns:1fr}}
 </style></head>
 <body><div class="wrap">
 <header>
-  <div class="brand">▲ PaperTrade <span class="pill">PAPER MONEY</span></div>
+  <div class="brand">▲ PaperTrade <span class="pill">PAPER MONEY</span><span class="pill" id="mb" style="background:var(--mut)">SIMULATED PRICES</span></div>
   <div class="stats" id="stats"></div>
+  <button class="ghost" id="livebtn" type="button">⚡ Live prices</button>
   <button class="ghost" id="theme" type="button">◐ Theme</button>
   <select id="speed" class="ghost" style="width:auto;margin:0" title="Simulation speed"><option value="500">Normal</option><option value="200" selected>Fast</option><option value="80">Turbo</option></select>
 </header>
+<div id="status" class="mut" style="font-size:12px;margin:-6px 0 12px"></div>
+<section class="card" id="livepanel" hidden>
+  <h2>Live prices from Alpaca</h2>
+  <p class="mut" style="margin:0 0 8px;font-size:13px">Paste the API keys from your free Alpaca Paper Trading account. They are saved only in this browser and sent only to Alpaca. Live prices work when this page is hosted on your own site (GitHub Pages or localhost), not in the claude.ai preview.</p>
+  <div class="two"><label>Key ID<input id="kid" type="text" autocomplete="off" spellcheck="false"></label><label>Secret key<input id="ksec" type="password" autocomplete="off"></label></div>
+  <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="go" id="kgo" type="button" style="width:auto;padding:9px 16px;background:var(--ac)">Connect</button><button class="ghost" id="ksim" type="button">Use simulator</button><button class="ghost" id="kclr" type="button">Forget keys</button></div>
+</section>
 <main>
   <section class="card"><h2>Watchlist</h2><div id="wl"></div>
     <div style="margin-top:10px"><button class="ghost" id="reset">Reset account</button></div></section>
@@ -91,11 +101,12 @@ input,select{width:100%;margin-top:4px;padding:9px 10px;border:1px solid var(--b
     <div class="msg" id="msg"></div>
   </aside>
 </main>
-<p class="foot">Prices are simulated and move randomly. This is a practice tool with no real money or brokerage, not financial advice, and not affiliated with Alpaca. Your account is saved in this browser.</p>
+<p class="foot">Prices are simulated unless you turn on Live prices (Alpaca’s free IEX feed, which covers one exchange and can differ slightly from the full market). This is a practice tool with no real money or brokerage, not financial advice, and not affiliated with Alpaca. Your account is saved in this browser.</p>
 </div>
 <script>
 "use strict";
-var KEY="papertrade.v1",START=100000;
+var START=100000,MODE=(function(){try{return localStorage.getItem("papertrade.mode")==="live"&&localStorage.getItem("papertrade.keys")?"live":"sim"}catch(e){return "sim"}})();
+function key(){return MODE==="live"?"papertrade.live.v1":"papertrade.v1"}
 var S0={AAPL:190,MSFT:420,NVDA:130,TSLA:250,AMZN:185,GOOGL:170,META:520,AMD:160,NFLX:650,SPY:560,QQQ:480,COIN:230};
 var SYMS=Object.keys(S0);
 var $=function(s){return document.querySelector(s)};
@@ -105,8 +116,8 @@ var cls=function(n){return n>=0?"up":"dn"};
 var rnd=Math.random;
 
 function fresh(){return {cash:START,pos:{},ord:[],eq:[],px:Object.assign({},S0),id:1}}
-function load(){try{var j=JSON.parse(localStorage.getItem(KEY));if(j&&j.px){j.px=Object.assign({},S0,j.px);return j}}catch(e){}return fresh()}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+function load(){try{var j=JSON.parse(localStorage.getItem(key()));if(j&&j.px){j.px=Object.assign({},S0,j.px);return j}}catch(e){}return fresh()}
+function save(){try{localStorage.setItem(key(),JSON.stringify(st))}catch(e){}}
 var st=load(),H={},open0={},sel="AAPL",side="buy",mode="sym",tab="pos",hold=false,tick=0,C={},CN=10,SHOW=48;
 
 function seed(){SYMS.forEach(function(s){var p=st.px[s],a=[p];for(var i=0;i<149;i++){p=p/(1+(rnd()+rnd()+rnd()-1.5)*0.001);a.unshift(p)}H[s]=a;open0[s]=st.px[s];seedC(s)})}
@@ -135,6 +146,7 @@ function fill(o,p){
 }
 
 function place(sym,sd,type,qty,lim){
+  if(MODE==="live"&&!liveReady)return "Waiting for live prices. Check the status line at the top.";
   if(!(qty>0))return "Enter a quantity above zero.";
   if(type==="limit"&&!(lim>0))return "Enter a limit price.";
   var px=st.px[sym];
@@ -272,7 +284,7 @@ $("#tbl").addEventListener("click",function(e){
 });
 var rt;$("#reset").addEventListener("click",function(){
   var b=this;
-  if(b.dataset.arm){st=fresh();seed();save();b.textContent="Reset account";delete b.dataset.arm;clearTimeout(rt);st.eq.push([Date.now(),START]);render();return}
+  if(b.dataset.arm){var keepPx=MODE==="live"?st.px:null;st=fresh();if(keepPx)st.px=keepPx;seed();if(MODE==="live")liveReady=false;save();b.textContent="Reset account";delete b.dataset.arm;clearTimeout(rt);st.eq.push([Date.now(),START]);render();return}
   b.dataset.arm=1;b.textContent="Click again to confirm";
   rt=setTimeout(function(){b.textContent="Reset account";delete b.dataset.arm},3000);
 });
@@ -281,5 +293,79 @@ try{var th=localStorage.getItem("papertrade.theme");if(th)document.documentEleme
 $("#theme").addEventListener("click",function(){var r=document.documentElement,n=r.getAttribute("data-theme")==="dark"?"light":"dark";r.setAttribute("data-theme",n);try{localStorage.setItem("papertrade.theme",n)}catch(e){}});
 if(!st.eq.length)st.eq.push([Date.now(),equity()]);
 render();var iv;function setSpeed(ms){clearInterval(iv);iv=setInterval(step,ms)}
-$("#speed").addEventListener("change",function(){setSpeed(+this.value)});setSpeed(200);
+$("#speed").addEventListener("change",function(){setSpeed(+this.value)});
+/* ---------- Live mode (Alpaca market data, free IEX feed) ---------- */
+var liveReady=false,liveBusy=false,liveIv=null,memK=null,API="https://data.alpaca.markets/v2/stocks/";
+function keys(){if(memK)return memK;try{return JSON.parse(localStorage.getItem("papertrade.keys"))}catch(e){return null}}
+function setStatus(m,err){var e=$("#status");e.textContent=m;e.style.color=err?"var(--dn)":"var(--mut)"}
+function badge(){var l=MODE==="live",b=$("#mb");b.textContent=l?"LIVE PRICES":"SIMULATED PRICES";b.style.background=l?"var(--up)":"var(--mut)";$("#speed").hidden=l;if(!l)setStatus("Simulated prices, not real market data.",false)}
+function aget(path){
+  var k=keys(),ac=new AbortController();setTimeout(function(){ac.abort()},8000);
+  return fetch(API+path,{headers:{"APCA-API-KEY-ID":k.id,"APCA-API-SECRET-KEY":k.sec},signal:ac.signal}).then(function(r){
+    if(r.status===401||r.status===403){var e=new Error("Alpaca rejected the keys. Check the Key ID and Secret, and that they come from your Paper Trading account.");e.fatal=true;throw e}
+    if(r.status===429)throw new Error("Alpaca says slow down (rate limited). Retrying.");
+    if(!r.ok)throw new Error("Alpaca error "+r.status+". Retrying.");
+    return r.json();
+  },function(){throw new Error("Couldn’t reach Alpaca. Live prices only work on a site you host (GitHub Pages or localhost), not the claude.ai preview. Retrying.")});
+}
+function lpx(x){return x.latestTrade?x.latestTrade.p:x.minuteBar?x.minuteBar.c:x.dailyBar?x.dailyBar.c:x.prevDailyBar?x.prevDailyBar.c:null}
+function loadBars(){
+  var start=new Date(Date.now()-6*864e5).toISOString();
+  return Promise.all(SYMS.map(function(s){
+    return aget(s+"/bars?timeframe=1Min&feed=iex&limit="+SHOW+"&sort=desc&start="+encodeURIComponent(start)).then(function(j){
+      var b=(j.bars||[]).slice().reverse();
+      if(b.length){C[s]=b.map(function(x){return {t:x.t,o:x.o,h:x.h,l:x.l,c:x.c,v:x.v}});H[s]=C[s].map(function(k){return k.c})}
+      else{var p=st.px[s];C[s]=[{o:p,h:p,l:p,c:p,v:0}];H[s]=[p,p]}
+    });
+  }));
+}
+function applyLive(s,x,p){
+  var c=C[s],k=c[c.length-1],m=x.minuteBar;
+  if(m){
+    if(!k.t||Date.parse(m.t)>Date.parse(k.t)){k={t:m.t,o:m.o,h:m.h,l:m.l,c:m.c,v:m.v};c.push(k);if(c.length>SHOW)c.shift()}
+    else if(m.t===k.t){k.o=m.o;k.h=m.h;k.l=m.l;k.c=m.c;k.v=m.v}
+  }
+  k.c=p;if(p>k.h)k.h=p;if(p<k.l)k.l=p;
+  if(H[s][H[s].length-1]!==p){H[s].push(p);if(H[s].length>150)H[s].shift()}
+}
+function checkOrders(){st.ord.forEach(function(o){if(o.status!=="open")return;var p=st.px[o.sym];if((o.side==="buy"&&p<=o.limit)||(o.side==="sell"&&p>=o.limit))fill(o,p)})}
+function poll(){
+  if(MODE!=="live"||liveBusy)return;liveBusy=true;var snap;
+  aget("snapshots?feed=iex&symbols="+SYMS.join(",")).then(function(j){
+    snap=j.snapshots||j;
+    SYMS.forEach(function(s){var x=snap[s];if(!x)return;var p=lpx(x);if(p){st.px[s]=p;if(x.prevDailyBar)open0[s]=x.prevDailyBar.c}});
+    return liveReady?null:loadBars();
+  }).then(function(){
+    var newest=0;
+    SYMS.forEach(function(s){var x=snap[s];if(!x)return;var p=lpx(x);if(!p)return;applyLive(s,x,p);if(x.latestTrade){var t=Date.parse(x.latestTrade.t);if(t>newest)newest=t}});
+    liveReady=true;tick++;checkOrders();
+    if(tick%2===0){st.eq.push([Date.now(),equity()]);if(st.eq.length>300)st.eq.shift()}
+    if(tick%10===0)save();
+    var age=(Date.now()-newest)/1000;
+    setStatus(age<600?"Live from Alpaca (IEX). Last trade at "+new Date(newest).toLocaleTimeString()+".":"US market looks closed or quiet. Showing last trades from "+new Date(newest).toLocaleString()+".",false);
+  }).catch(function(e){if(e.fatal)clearInterval(liveIv);setStatus(e.message,true)}).then(function(){liveBusy=false;render()});
+}
+function startLive(){setStatus("Connecting to Alpaca…",false);poll();liveIv=setInterval(poll,2000)}
+function setMode(m){
+  save();MODE=m;try{localStorage.setItem("papertrade.mode",m)}catch(e){}
+  clearInterval(iv);clearInterval(liveIv);
+  st=load();liveReady=false;liveBusy=false;seed();
+  if(!st.eq.length)st.eq.push([Date.now(),equity()]);
+  badge();
+  if(m==="live")startLive();else setSpeed(+$("#speed").value);
+  hold=false;render();
+}
+$("#livebtn").addEventListener("click",function(){var p=$("#livepanel");p.hidden=!p.hidden;var k=keys();if(k&&!$("#kid").value)$("#kid").value=k.id});
+$("#kgo").addEventListener("click",function(){
+  var id=$("#kid").value.trim(),sec=$("#ksec").value.trim(),k=keys();
+  if(!id){setStatus("Enter your Key ID.",true);return}
+  if(!sec&&k&&k.id===id)sec=k.sec;
+  if(!sec){setStatus("Enter your Secret key.",true);return}
+  memK={id:id,sec:sec};
+  try{localStorage.setItem("papertrade.keys",JSON.stringify(memK))}catch(e){}
+  $("#ksec").value="";$("#livepanel").hidden=true;setMode("live");
+});
+$("#ksim").addEventListener("click",function(){$("#livepanel").hidden=true;if(MODE==="live")setMode("sim")});
+$("#kclr").addEventListener("click",function(){memK=null;try{localStorage.removeItem("papertrade.keys")}catch(e){}$("#kid").value="";$("#ksec").value="";if(MODE==="live")setMode("sim");setStatus("Keys removed from this browser.",false)});
+badge();if(MODE==="live")startLive();else setSpeed(+$("#speed").value);
 </script></body></html>

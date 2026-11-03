@@ -14,6 +14,9 @@ A paper trading simulator that runs entirely in the browser. Start with $100,000
 - Account saved in `localStorage`, with a reset button
 - Dark mode by default with a light mode toggle, responsive layout
 
+## Live prices (optional)
+Click **⚡ Live prices**, paste the API keys from your free [Alpaca](https://alpaca.markets) Paper Trading account, and press Connect. The page then polls Alpaca’s free market data (IEX feed) every 2 seconds. Keys are stored only in your browser’s `localStorage` and are sent only to Alpaca. Never commit keys to the repo. Live and simulated modes keep separate paper accounts. Live prices only work when the page is served from your own site (GitHub Pages or localhost), and only move during US market hours.
+
 ## Run locally
 It is a single static file. Open `index.html` in a browser, or serve the folder:
 
@@ -25,7 +28,6 @@ python3 -m http.server 8000
 Prices are **simulated** with a random walk, so they are not real market data. This is a practice tool, not financial advice, and it is not affiliated with Alpaca or any broker.
 
 ## Ideas for next steps
-- Real prices via a market data API (for example Alpaca’s free market data, proxied through a small backend so keys stay private)
 - Stop and stop-limit orders
 - Accounts and a shared leaderboard (needs a backend such as Supabase)
 
