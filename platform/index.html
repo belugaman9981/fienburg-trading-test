@@ -294,6 +294,7 @@ $("#theme").addEventListener("click",function(){var r=document.documentElement,n
 if(!st.eq.length)st.eq.push([Date.now(),equity()]);
 render();var iv;function setSpeed(ms){clearInterval(iv);iv=setInterval(step,ms)}
 $("#speed").addEventListener("change",function(){setSpeed(+this.value)});
+function pt(x){return Date.parse(String(x).replace(/(\.\d{3})\d+/,"$1"))}
 /* ---------- Live mode (Alpaca market data, free IEX feed) ---------- */
 var liveReady=false,liveBusy=false,liveIv=null,memK=null,API="https://data.alpaca.markets/v2/stocks/";
 function keys(){if(memK)return memK;try{return JSON.parse(localStorage.getItem("papertrade.keys"))}catch(e){return null}}
@@ -322,7 +323,7 @@ function loadBars(){
 function applyLive(s,x,p){
   var c=C[s],k=c[c.length-1],m=x.minuteBar;
   if(m){
-    if(!k.t||Date.parse(m.t)>Date.parse(k.t)){k={t:m.t,o:m.o,h:m.h,l:m.l,c:m.c,v:m.v};c.push(k);if(c.length>SHOW)c.shift()}
+    if(!k.t||pt(m.t)>pt(k.t)){k={t:m.t,o:m.o,h:m.h,l:m.l,c:m.c,v:m.v};c.push(k);if(c.length>SHOW)c.shift()}
     else if(m.t===k.t){k.o=m.o;k.h=m.h;k.l=m.l;k.c=m.c;k.v=m.v}
   }
   k.c=p;if(p>k.h)k.h=p;if(p<k.l)k.l=p;
@@ -333,22 +334,52 @@ function poll(){
   if(MODE!=="live"||liveBusy)return;liveBusy=true;var snap;
   aget("snapshots?feed=iex&symbols="+SYMS.join(",")).then(function(j){
     snap=j.snapshots||j;
-    SYMS.forEach(function(s){var x=snap[s];if(!x)return;var p=lpx(x);if(p){st.px[s]=p;if(x.prevDailyBar)open0[s]=x.prevDailyBar.c}});
+    SYMS.forEach(function(s){var x=snap[s];if(!x)return;var p=lpx(x);if(p&&!wsFresh(s))st.px[s]=p;if(p&&x.prevDailyBar)open0[s]=x.prevDailyBar.c});
     return liveReady?null:loadBars();
   }).then(function(){
     var newest=0;
-    SYMS.forEach(function(s){var x=snap[s];if(!x)return;var p=lpx(x);if(!p)return;applyLive(s,x,p);if(x.latestTrade){var t=Date.parse(x.latestTrade.t);if(t>newest)newest=t}});
+    SYMS.forEach(function(s){var x=snap[s];if(!x)return;var p=lpx(x);if(!p)return;if(!wsFresh(s))applyLive(s,x,p);if(x.latestTrade){var t=pt(x.latestTrade.t);if(t>newest)newest=t}});
     liveReady=true;tick++;checkOrders();
     if(tick%2===0){st.eq.push([Date.now(),equity()]);if(st.eq.length>300)st.eq.shift()}
     if(tick%10===0)save();
-    var age=(Date.now()-newest)/1000;
-    setStatus(age<600?"Live from Alpaca (IEX). Last trade at "+new Date(newest).toLocaleTimeString()+".":"US market looks closed or quiet. Showing last trades from "+new Date(newest).toLocaleString()+".",false);
-  }).catch(function(e){if(e.fatal)clearInterval(liveIv);setStatus(e.message,true)}).then(function(){liveBusy=false;render()});
+    newest=Math.max(newest,lastT);var age=(Date.now()-newest)/1000;
+    setStatus((age<600?(wsOn?"Streaming live":"Live (polling)")+" from Alpaca (IEX). Last trade at "+new Date(newest).toLocaleTimeString()+".":"US market looks closed or quiet. Showing last trades from "+new Date(newest).toLocaleString()+".")+(wsErr?" Stream issue: "+wsErr:""),!!wsErr);
+  }).catch(function(e){if(e.fatal){clearInterval(liveIv);wsNoRetry=true;wsStop()}setStatus(e.message,true)}).then(function(){liveBusy=false;render()});
 }
-function startLive(){setStatus("Connecting to Alpaca…",false);poll();liveIv=setInterval(poll,2000)}
+
+/* ---------- Streaming trades over WebSocket (no CORS, much faster than polling) ---------- */
+var ws=null,wsOn=false,wsTry=0,wsT=null,wsNoRetry=false,wsErr="",lastWs={},lastT=0,rq=0;
+function wsFresh(s){return wsOn&&Date.now()-(lastWs[s]||0)<15000}
+function sched(){if(rq)return;rq=1;setTimeout(function(){rq=0;if(MODE!=="live")return;checkOrders();render()},120)}
+function onTrade(m){
+  var s=m.S,p=m.p;if(!liveReady||!C[s]||!p)return;
+  var t=pt(m.t),mb=Math.floor(t/60000)*60000,c=C[s],k=c[c.length-1];
+  st.px[s]=p;lastWs[s]=Date.now();if(t>lastT)lastT=t;
+  if(!k.t||mb>pt(k.t)){k={t:new Date(mb).toISOString(),o:p,h:p,l:p,c:p,v:m.s||0};c.push(k);if(c.length>SHOW)c.shift()}
+  else{if(p>k.h)k.h=p;if(p<k.l)k.l=p;k.c=p;k.v+=m.s||0}
+  if(H[s][H[s].length-1]!==p){H[s].push(p);if(H[s].length>150)H[s].shift()}
+  sched();
+}
+function wsStart(){
+  var k=keys();if(MODE!=="live"||ws||!k||!window.WebSocket)return;
+  var me;try{me=ws=new WebSocket("wss://stream.data.alpaca.markets/v2/iex")}catch(e){ws=null;return}
+  me.onmessage=function(ev){
+    var a;try{a=JSON.parse(ev.data)}catch(e){return}
+    a.forEach(function(m){
+      if(m.T==="success"&&m.msg==="connected")me.send(JSON.stringify({action:"auth",key:k.id,secret:k.sec}));
+      else if(m.T==="success"&&m.msg==="authenticated"){me.send(JSON.stringify({action:"subscribe",trades:SYMS}));wsOn=true;wsTry=0;wsErr=""}
+      else if(m.T==="error"){wsErr=(m.msg||("code "+m.code))+(m.code===406?" (close other PaperTrade tabs)":"");if(m.code===401||m.code===402||m.code===403)wsNoRetry=true}
+      else if(m.T==="t")onTrade(m);
+    });
+  };
+  me.onclose=function(){if(ws!==me)return;ws=null;wsOn=false;if(MODE==="live"&&!wsNoRetry){clearTimeout(wsT);wsT=setTimeout(wsStart,Math.min(30000,2000*Math.pow(2,wsTry++)))}};
+  me.onerror=function(){try{me.close()}catch(e){}};
+}
+function wsStop(){clearTimeout(wsT);var w=ws;ws=null;wsOn=false;if(w){try{w.close()}catch(e){}}}
+function startLive(){setStatus("Connecting to Alpaca…",false);wsNoRetry=false;wsStart();poll();liveIv=setInterval(poll,2000)}
 function setMode(m){
   save();MODE=m;try{localStorage.setItem("papertrade.mode",m)}catch(e){}
-  clearInterval(iv);clearInterval(liveIv);
+  clearInterval(iv);clearInterval(liveIv);wsStop();
   st=load();liveReady=false;liveBusy=false;seed();
   if(!st.eq.length)st.eq.push([Date.now(),equity()]);
   badge();
