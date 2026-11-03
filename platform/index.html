@@ -107,8 +107,8 @@ input,select{width:100%;margin-top:4px;padding:9px 10px;border:1px solid var(--b
 "use strict";
 var START=100000,MODE=(function(){try{return localStorage.getItem("papertrade.mode")==="live"&&localStorage.getItem("papertrade.keys")?"live":"sim"}catch(e){return "sim"}})();
 function key(){return MODE==="live"?"papertrade.live.v1":"papertrade.v1"}
-var S0={AAPL:190,MSFT:420,NVDA:130,TSLA:250,AMZN:185,GOOGL:170,META:520,AMD:160,NFLX:650,SPY:560,QQQ:480,COIN:230};
-var SYMS=Object.keys(S0);
+var S0={AAPL:190,MSFT:420,NVDA:130,TSLA:250,AMZN:185,GOOGL:170,META:520,AMD:160,NFLX:650,SPY:560,QQQ:480,COIN:230,"BTC/USD":100000};
+var SYMS=Object.keys(S0),STK=SYMS.filter(function(s){return s.indexOf("/")<0}),CRY=SYMS.filter(function(s){return s.indexOf("/")>0});
 var $=function(s){return document.querySelector(s)};
 var usd=function(n){return n.toLocaleString("en-US",{style:"currency",currency:"USD"})};
 var pct=function(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%"};
@@ -147,11 +147,12 @@ function fill(o,p){
 
 function place(sym,sd,type,qty,lim){
   if(MODE==="live"&&!liveReady)return "Waiting for live prices. Check the status line at the top.";
+  if(MODE==="live"&&!liveSeen[sym])return "No live price for "+sym+" yet, so it can’t be traded right now.";
   if(!(qty>0))return "Enter a quantity above zero.";
   if(type==="limit"&&!(lim>0))return "Enter a limit price.";
   var px=st.px[sym];
   if(sd==="buy"){var need=qty*(type==="limit"?lim:px);if(need>bp()+1e-6)return "Not enough buying power ("+usd(bp())+" available)."}
-  else{var av=held(sym)-openSell(sym);if(qty>av+1e-9)return "You only have "+(+av.toFixed(4))+" shares available to sell. Shorting isn’t supported."}
+  else{var av=held(sym)-openSell(sym);if(qty>av+1e-9)return "You only have "+(+av.toFixed(6))+" shares available to sell. Shorting isn’t supported."}
   var o={id:st.id++,sym:sym,side:sd,type:type,qty:qty,limit:type==="limit"?lim:null,status:"open",t:Date.now()};
   st.ord.push(o);
   if(type==="market")fill(o,px);
@@ -220,7 +221,7 @@ function render(){
   if(!hold){
     setHTML($("#wl"),SYMS.map(function(s){
       var ch=st.px[s]/open0[s]-1;
-      return '<div class="row'+(s===sel?" sel":"")+'" data-s="'+s+'"><div><b>'+s+'</b><span class="mut">'+(held(s)?+held(s).toFixed(4)+" sh":"")+'</span></div><div style="height:22px">'+spark(H[s].slice(-40),60,22)+'</div><div class="r"><b>'+st.px[s].toFixed(2)+'</b><span class="'+cls(ch)+'">'+pct(ch)+'</span></div></div>';
+      return '<div class="row'+(s===sel?" sel":"")+'" data-s="'+s+'"><div><b>'+s+'</b><span class="mut">'+(held(s)?+held(s).toFixed(6)+" sh":"")+'</span></div><div style="height:22px">'+spark(H[s].slice(-40),60,22)+'</div><div class="r"><b>'+st.px[s].toFixed(2)+'</b><span class="'+cls(ch)+'">'+pct(ch)+'</span></div></div>';
     }).join(""));
   }
 
@@ -240,27 +241,27 @@ function posTable(){
   if(!ks.length)return '<div class="empty">No open positions. Place a trade to get started.</div>';
   return '<table><tr><th>Symbol</th><th>Qty</th><th>Avg cost</th><th>Price</th><th>Value</th><th>P/L</th><th>P/L %</th><th></th></tr>'+ks.map(function(s){
     var q=st.pos[s],v=q.qty*st.px[s],p=v-q.qty*q.avg;
-    return '<tr><td><b>'+s+'</b></td><td>'+(+q.qty.toFixed(4))+'</td><td>'+q.avg.toFixed(2)+'</td><td>'+st.px[s].toFixed(2)+'</td><td>'+usd(v)+'</td><td class="'+cls(p)+'">'+usd(p)+'</td><td class="'+cls(p)+'">'+pct(p/(q.qty*q.avg))+'</td><td><button class="sm" data-x="'+s+'">Close</button></td></tr>';
+    return '<tr><td><b>'+s+'</b></td><td>'+(+q.qty.toFixed(6))+'</td><td>'+q.avg.toFixed(2)+'</td><td>'+st.px[s].toFixed(2)+'</td><td>'+usd(v)+'</td><td class="'+cls(p)+'">'+usd(p)+'</td><td class="'+cls(p)+'">'+pct(p/(q.qty*q.avg))+'</td><td><button class="sm" data-x="'+s+'">Close</button></td></tr>';
   }).join("")+'</table>';
 }
 function ordTable(){
   if(!st.ord.length)return '<div class="empty">No orders yet.</div>';
   return '<table><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Limit</th><th>Fill</th><th>Status</th><th></th></tr>'+st.ord.slice(-50).reverse().map(function(o){
-    return '<tr><td>'+new Date(o.t).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"})+'</td><td><b>'+o.sym+'</b></td><td class="'+(o.side==="buy"?"up":"dn")+'">'+o.side+'</td><td>'+o.type+'</td><td>'+(+o.qty.toFixed(4))+'</td><td>'+(o.limit?o.limit.toFixed(2):"–")+'</td><td>'+(o.fill?o.fill.toFixed(2):"–")+'</td><td>'+o.status+'</td><td>'+(o.status==="open"?'<button class="sm" data-c="'+o.id+'">Cancel</button>':"")+'</td></tr>';
+    return '<tr><td>'+new Date(o.t).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"})+'</td><td><b>'+o.sym+'</b></td><td class="'+(o.side==="buy"?"up":"dn")+'">'+o.side+'</td><td>'+o.type+'</td><td>'+(+o.qty.toFixed(6))+'</td><td>'+(o.limit?o.limit.toFixed(2):"–")+'</td><td>'+(o.fill?o.fill.toFixed(2):"–")+'</td><td>'+o.status+'</td><td>'+(o.status==="open"?'<button class="sm" data-c="'+o.id+'">Cancel</button>':"")+'</td></tr>';
   }).join("")+'</table>';
 }
 
 function est(){
   var q=parseFloat($("#qty").value)||0,t=$("#otype").value,l=parseFloat($("#lim").value)||0;
   var p=t==="limit"&&l?l:st.px[sel];
-  $("#est").innerHTML='Market price <b>'+st.px[sel].toFixed(2)+'</b><br>Est. '+(side==="buy"?"cost":"proceeds")+' <b>'+usd(q*p)+'</b><br>'+(side==="buy"?'Buying power <b>'+usd(bp())+'</b>':'Shares held <b>'+(+held(sel).toFixed(4))+'</b>');
+  $("#est").innerHTML='Market price <b>'+st.px[sel].toFixed(2)+'</b><br>Est. '+(side==="buy"?"cost":"proceeds")+' <b>'+usd(q*p)+'</b><br>'+(side==="buy"?'Buying power <b>'+usd(bp())+'</b>':'Shares held <b>'+(+held(sel).toFixed(6))+'</b>');
   var g=$("#go");g.textContent=(side==="buy"?"Buy ":"Sell ")+sel;g.className="go "+side;
 }
 
 document.addEventListener("pointerdown",function(e){if(e.target.closest("#tbl,#wl"))hold=true});
 ["pointerup","pointercancel"].forEach(function(n){document.addEventListener(n,function(){setTimeout(function(){hold=false},60)})});
 
-$("#wl").addEventListener("click",function(e){var r=e.target.closest("[data-s]");if(r){sel=r.dataset.s;$("#lim").value="";hold=false;render()}});
+$("#wl").addEventListener("click",function(e){var r=e.target.closest("[data-s]");if(r){sel=r.dataset.s;$("#lim").value="";var cq=sel.indexOf("/")>0,qv=parseFloat($("#qty").value);if(cq&&qv>=1)$("#qty").value=0.01;if(!cq&&qv<1)$("#qty").value=1;hold=false;render()}});
 $("#cmode").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;mode=b.dataset.m;[].forEach.call($("#cmode").children,function(x){x.classList.toggle("on",x===b)});render()});
 $("#tabs").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;tab=b.dataset.t;hold=false;[].forEach.call($("#tabs").children,function(x){x.classList.toggle("on",x===b)});render()});
 $("#side").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;side=b.dataset.s;[].forEach.call($("#side").children,function(x){x.classList.toggle("on",x===b)});est()});
@@ -268,8 +269,8 @@ $("#otype").addEventListener("change",function(){$("#lblim").hidden=this.value!=
 ["#qty","#lim"].forEach(function(s){$(s).addEventListener("input",est)});
 $("#max").addEventListener("click",function(){
   var p=$("#otype").value==="limit"&&parseFloat($("#lim").value)>0?parseFloat($("#lim").value):st.px[sel];
-  var m=side==="buy"?Math.floor(bp()/p):held(sel)-openSell(sel);
-  $("#qty").value=Math.max(0,+m.toFixed(4));est();
+  var d=sel.indexOf("/")>0?1e6:1,m=side==="buy"?Math.floor(bp()/p*d)/d:held(sel)-openSell(sel);
+  $("#qty").value=Math.max(0,+m.toFixed(6));est();
 });
 $("#go").addEventListener("click",function(){
   var err=place(sel,side,$("#otype").value,parseFloat($("#qty").value),parseFloat($("#lim").value));
@@ -296,13 +297,13 @@ render();var iv;function setSpeed(ms){clearInterval(iv);iv=setInterval(step,ms)}
 $("#speed").addEventListener("change",function(){setSpeed(+this.value)});
 function pt(x){return Date.parse(String(x).replace(/(\.\d{3})\d+/,"$1"))}
 /* ---------- Live mode (Alpaca market data, free IEX feed) ---------- */
-var liveReady=false,liveBusy=false,liveIv=null,memK=null,API="https://data.alpaca.markets/v2/stocks/";
+var liveReady=false,liveBusy=false,liveIv=null,memK=null,cryptoErr="",liveSeen={},API="https://data.alpaca.markets/v2/stocks/",CAPI="https://data.alpaca.markets/v1beta3/crypto/us/";
 function keys(){if(memK)return memK;try{return JSON.parse(localStorage.getItem("papertrade.keys"))}catch(e){return null}}
 function setStatus(m,err){var e=$("#status");e.textContent=m;e.style.color=err?"var(--dn)":"var(--mut)"}
 function badge(){var l=MODE==="live",b=$("#mb");b.textContent=l?"LIVE PRICES":"SIMULATED PRICES";b.style.background=l?"var(--up)":"var(--mut)";$("#speed").hidden=l;if(!l)setStatus("Simulated prices, not real market data.",false)}
-function aget(path){
+function aget(path,base){
   var k=keys(),ac=new AbortController();setTimeout(function(){ac.abort()},8000);
-  return fetch(API+path,{headers:{"APCA-API-KEY-ID":k.id,"APCA-API-SECRET-KEY":k.sec},signal:ac.signal}).then(function(r){
+  return fetch((base||API)+path,{headers:{"APCA-API-KEY-ID":k.id,"APCA-API-SECRET-KEY":k.sec},signal:ac.signal}).then(function(r){
     if(r.status===401||r.status===403){var e=new Error("Alpaca rejected the keys. Check the Key ID and Secret, and that they come from your Paper Trading account.");e.fatal=true;throw e}
     if(r.status===429)throw new Error("Alpaca says slow down (rate limited). Retrying.");
     if(!r.ok)throw new Error("Alpaca error "+r.status+". Retrying.");
@@ -311,10 +312,12 @@ function aget(path){
 }
 function lpx(x){return x.latestTrade?x.latestTrade.p:x.minuteBar?x.minuteBar.c:x.dailyBar?x.dailyBar.c:x.prevDailyBar?x.prevDailyBar.c:null}
 function loadBars(){
-  var start=new Date(Date.now()-6*864e5).toISOString();
+  var start=new Date(Date.now()-6*864e5).toISOString(),q="timeframe=1Min&limit="+SHOW+"&sort=desc&start="+encodeURIComponent(start);
   return Promise.all(SYMS.map(function(s){
-    return aget(s+"/bars?timeframe=1Min&feed=iex&limit="+SHOW+"&sort=desc&start="+encodeURIComponent(start)).then(function(j){
-      var b=(j.bars||[]).slice().reverse();
+    var cr=s.indexOf("/")>0;
+    var req=cr?aget("bars?symbols="+encodeURIComponent(s)+"&"+q,CAPI).catch(function(e){if(e.fatal)throw e;return {}}):aget(s+"/bars?feed=iex&"+q);
+    return req.then(function(j){
+      var b=((cr?(j.bars||{})[s]:j.bars)||[]).slice().reverse();
       if(b.length){C[s]=b.map(function(x){return {t:x.t,o:x.o,h:x.h,l:x.l,c:x.c,v:x.v}});H[s]=C[s].map(function(k){return k.c})}
       else{var p=st.px[s];C[s]=[{o:p,h:p,l:p,c:p,v:0}];H[s]=[p,p]}
     });
@@ -332,55 +335,60 @@ function applyLive(s,x,p){
 function checkOrders(){st.ord.forEach(function(o){if(o.status!=="open")return;var p=st.px[o.sym];if((o.side==="buy"&&p<=o.limit)||(o.side==="sell"&&p>=o.limit))fill(o,p)})}
 function poll(){
   if(MODE!=="live"||liveBusy)return;liveBusy=true;var snap;
-  aget("snapshots?feed=iex&symbols="+SYMS.join(",")).then(function(j){
-    snap=j.snapshots||j;
-    SYMS.forEach(function(s){var x=snap[s];if(!x)return;var p=lpx(x);if(p&&!wsFresh(s))st.px[s]=p;if(p&&x.prevDailyBar)open0[s]=x.prevDailyBar.c});
+  var cp=aget("snapshots?symbols="+encodeURIComponent(CRY.join(",")),CAPI).then(function(j){cryptoErr="";return j},function(e){if(e.fatal)throw e;cryptoErr=e.message;return {}});
+  Promise.all([aget("snapshots?feed=iex&symbols="+STK.join(",")),cp]).then(function(r){
+    snap=Object.assign({},r[0].snapshots||r[0],r[1].snapshots||r[1]);
+    SYMS.forEach(function(s){var x=snap[s];if(!x)return;var p=lpx(x);if(p)liveSeen[s]=1;if(p&&!wsFresh(s))st.px[s]=p;if(p&&x.prevDailyBar)open0[s]=x.prevDailyBar.c});
     return liveReady?null:loadBars();
   }).then(function(){
     var newest=0;
-    SYMS.forEach(function(s){var x=snap[s];if(!x)return;var p=lpx(x);if(!p)return;if(!wsFresh(s))applyLive(s,x,p);if(x.latestTrade){var t=pt(x.latestTrade.t);if(t>newest)newest=t}});
+    SYMS.forEach(function(s){var x=snap[s];if(!x)return;var p=lpx(x);if(!p)return;if(!wsFresh(s))applyLive(s,x,p);if(x.latestTrade&&s.indexOf("/")<0){var t=pt(x.latestTrade.t);if(t>newest)newest=t}});
     liveReady=true;tick++;checkOrders();
     if(tick%2===0){st.eq.push([Date.now(),equity()]);if(st.eq.length>300)st.eq.shift()}
     if(tick%10===0)save();
     newest=Math.max(newest,lastT);var age=(Date.now()-newest)/1000;
-    setStatus((age<600?(wsOn?"Streaming live":"Live (polling)")+" from Alpaca (IEX). Last trade at "+new Date(newest).toLocaleTimeString()+".":"US market looks closed or quiet. Showing last trades from "+new Date(newest).toLocaleString()+".")+(wsErr?" Stream issue: "+wsErr:""),!!wsErr);
+    setStatus((age<600?(wsAny()?"Streaming live":"Live (polling)")+" from Alpaca (IEX). Last trade at "+new Date(newest).toLocaleTimeString()+".":"US market looks closed or quiet. Showing last trades from "+new Date(newest).toLocaleString()+". BTC/USD still trades 24/7.")+(wsErr?" Stream issue: "+wsErr:"")+(cryptoErr?" BTC/USD unavailable: "+cryptoErr:""),!!(wsErr||cryptoErr));
   }).catch(function(e){if(e.fatal){clearInterval(liveIv);wsNoRetry=true;wsStop()}setStatus(e.message,true)}).then(function(){liveBusy=false;render()});
 }
 
 /* ---------- Streaming trades over WebSocket (no CORS, much faster than polling) ---------- */
-var ws=null,wsOn=false,wsTry=0,wsT=null,wsNoRetry=false,wsErr="",lastWs={},lastT=0,rq=0;
-function wsFresh(s){return wsOn&&Date.now()-(lastWs[s]||0)<15000}
+var WS={s:null,c:null},WT={s:null,c:null},WTRY={s:0,c:0},wsOnA={s:false,c:false},wsNoRetry=false,wsErr="",lastWs={},lastT=0,rq=0;
+var WURL={s:"wss://stream.data.alpaca.markets/v2/iex",c:"wss://stream.data.alpaca.markets/v1beta3/crypto/us"};
+function wsAny(){return wsOnA.s||wsOnA.c}
+function wsFresh(s){return wsOnA[s.indexOf("/")>0?"c":"s"]&&Date.now()-(lastWs[s]||0)<15000}
 function sched(){if(rq)return;rq=1;setTimeout(function(){rq=0;if(MODE!=="live")return;checkOrders();render()},120)}
 function onTrade(m){
   var s=m.S,p=m.p;if(!liveReady||!C[s]||!p)return;
   var t=pt(m.t),mb=Math.floor(t/60000)*60000,c=C[s],k=c[c.length-1];
-  st.px[s]=p;lastWs[s]=Date.now();if(t>lastT)lastT=t;
+  st.px[s]=p;liveSeen[s]=1;lastWs[s]=Date.now();if(t>lastT&&s.indexOf("/")<0)lastT=t;
   if(!k.t||mb>pt(k.t)){k={t:new Date(mb).toISOString(),o:p,h:p,l:p,c:p,v:m.s||0};c.push(k);if(c.length>SHOW)c.shift()}
   else{if(p>k.h)k.h=p;if(p<k.l)k.l=p;k.c=p;k.v+=m.s||0}
   if(H[s][H[s].length-1]!==p){H[s].push(p);if(H[s].length>150)H[s].shift()}
   sched();
 }
-function wsStart(){
-  var k=keys();if(MODE!=="live"||ws||!k||!window.WebSocket)return;
-  var me;try{me=ws=new WebSocket("wss://stream.data.alpaca.markets/v2/iex")}catch(e){ws=null;return}
+function wsOne(k){
+  var key=keys(),syms=k==="s"?STK:CRY;
+  if(MODE!=="live"||WS[k]||!key||!window.WebSocket)return;
+  var me;try{me=WS[k]=new WebSocket(WURL[k])}catch(e){WS[k]=null;return}
   me.onmessage=function(ev){
     var a;try{a=JSON.parse(ev.data)}catch(e){return}
     a.forEach(function(m){
-      if(m.T==="success"&&m.msg==="connected")me.send(JSON.stringify({action:"auth",key:k.id,secret:k.sec}));
-      else if(m.T==="success"&&m.msg==="authenticated"){me.send(JSON.stringify({action:"subscribe",trades:SYMS}));wsOn=true;wsTry=0;wsErr=""}
-      else if(m.T==="error"){wsErr=(m.msg||("code "+m.code))+(m.code===406?" (close other PaperTrade tabs)":"");if(m.code===401||m.code===402||m.code===403)wsNoRetry=true}
+      if(m.T==="success"&&m.msg==="connected")me.send(JSON.stringify({action:"auth",key:key.id,secret:key.sec}));
+      else if(m.T==="success"&&m.msg==="authenticated"){me.send(JSON.stringify({action:"subscribe",trades:syms}));wsOnA[k]=true;WTRY[k]=0;wsErr=""}
+      else if(m.T==="error"){wsErr=(k==="c"?"crypto stream: ":"")+(m.msg||("code "+m.code))+(m.code===406?" (close other PaperTrade tabs)":"");if(m.code===401||m.code===402||m.code===403)wsNoRetry=true}
       else if(m.T==="t")onTrade(m);
     });
   };
-  me.onclose=function(){if(ws!==me)return;ws=null;wsOn=false;if(MODE==="live"&&!wsNoRetry){clearTimeout(wsT);wsT=setTimeout(wsStart,Math.min(30000,2000*Math.pow(2,wsTry++)))}};
+  me.onclose=function(){if(WS[k]!==me)return;WS[k]=null;wsOnA[k]=false;if(MODE==="live"&&!wsNoRetry){clearTimeout(WT[k]);WT[k]=setTimeout(function(){wsOne(k)},Math.min(30000,2000*Math.pow(2,WTRY[k]++)))}};
   me.onerror=function(){try{me.close()}catch(e){}};
 }
-function wsStop(){clearTimeout(wsT);var w=ws;ws=null;wsOn=false;if(w){try{w.close()}catch(e){}}}
+function wsStart(){wsOne("s");wsOne("c")}
+function wsStop(){["s","c"].forEach(function(k){clearTimeout(WT[k]);var w=WS[k];WS[k]=null;wsOnA[k]=false;if(w){try{w.close()}catch(e){}}})}
 function startLive(){setStatus("Connecting to Alpaca…",false);wsNoRetry=false;wsStart();poll();liveIv=setInterval(poll,2000)}
 function setMode(m){
   save();MODE=m;try{localStorage.setItem("papertrade.mode",m)}catch(e){}
   clearInterval(iv);clearInterval(liveIv);wsStop();
-  st=load();liveReady=false;liveBusy=false;seed();
+  st=load();liveReady=false;liveBusy=false;liveSeen={};seed();
   if(!st.eq.length)st.eq.push([Date.now(),equity()]);
   badge();
   if(m==="live")startLive();else setSpeed(+$("#speed").value);
