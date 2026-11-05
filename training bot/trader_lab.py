@@ -1,5 +1,5 @@
 """
-trader_lab.py - train a long/short model on web-sourced price data and 
+trader_lab.py - train a long/short model on web-sourced price data and
 benchmark it against standard strategies.
 
 Usage:
