@@ -149,4 +149,3 @@ if __name__ == "__main__":
     print(f"\nLatest danger score: {last['danger']:.0f}/100   RSI: {last['rsi14']:.0f}")
     print("Signals on the latest candle:", ", ".join(on) if on else "none")
     print("\nCompare each row to 'Any random day'. Rows with few samples mean little.")
- 
